@@ -6,8 +6,6 @@ package akka.remote.artery
 
 import java.util.Queue
 
-import scala.concurrent.duration._
-
 import akka.actor.Actor
 import akka.actor.Props
 import akka.stream.ActorMaterializer
@@ -20,10 +18,12 @@ import akka.testkit.AkkaSpec
 import akka.testkit.ImplicitSender
 import org.agrona.concurrent.ManyToOneConcurrentArrayQueue
 
+import akka.stream.impl.FastDroppingQueue
+
 object SendQueueSpec {
 
   case class ProduceToQueue(from: Int, until: Int, queue: Queue[Msg])
-  case class ProduceToQueueValue(from: Int, until: Int, queue: SendQueue.QueueValue[Msg])
+  case class ProduceToQueueValue(from: Int, until: Int, queue: FastDroppingQueue[Msg])
   case class Msg(fromProducer: String, value: Int)
 
   def producerProps(producerId: String): Props =
@@ -41,7 +41,7 @@ object SendQueueSpec {
       case ProduceToQueueValue(from, until, queue) =>
         var i = from
         while (i < until) {
-          if (!queue.offer(Msg(producerId, i)))
+          if (queue.offer(Msg(producerId, i)) != FastDroppingQueue.OfferResult.Enqueued)
             throw new IllegalStateException(s"offer failed from $producerId value $i")
           i += 1
         }
@@ -67,12 +67,10 @@ class SendQueueSpec extends AkkaSpec("akka.actor.serialize-messages = off") with
   "SendQueue" must {
 
     "deliver all messages" in {
-      val queue = createQueue[String](128)
       val (sendQueue, downstream) =
-        Source.fromGraph(new SendQueue[String](sendToDeadLetters)).toMat(TestSink.probe)(Keep.both).run()
+        Source.fromGraph(FastDroppingQueue[String](128)).toMat(TestSink.probe)(Keep.both).run()
 
       downstream.request(10)
-      sendQueue.inject(queue)
       sendQueue.offer("a")
       sendQueue.offer("b")
       sendQueue.offer("c")
@@ -82,42 +80,34 @@ class SendQueueSpec extends AkkaSpec("akka.actor.serialize-messages = off") with
       downstream.cancel()
     }
 
-    "deliver messages enqueued before materialization" in {
-      val queue = createQueue[String](128)
-      queue.offer("a")
-      queue.offer("b")
-
-      val (sendQueue, downstream) =
-        Source.fromGraph(new SendQueue[String](sendToDeadLetters)).toMat(TestSink.probe)(Keep.both).run()
-
-      downstream.request(10)
-      downstream.expectNoMessage(200.millis)
-      sendQueue.inject(queue)
-      downstream.expectNext("a")
-      downstream.expectNext("b")
-
-      sendQueue.offer("c")
-      downstream.expectNext("c")
-      downstream.cancel()
-    }
+//    "deliver messages enqueued before materialization" in {
+//      queue.offer("a")
+//      queue.offer("b")
+//
+//      val (sendQueue, downstream) =
+//        Source.fromGraph(FastDroppingQueue[String](128)).toMat(TestSink.probe)(Keep.both).run()
+//
+//      downstream.request(10)
+//      downstream.expectNoMessage(200.millis)
+//      downstream.expectNext("a")
+//      downstream.expectNext("b")
+//
+//      sendQueue.offer("c")
+//      downstream.expectNext("c")
+//      downstream.cancel()
+//    }
 
     "deliver bursts of messages" in {
       // this test verifies that the wakeup signal is triggered correctly
-      val queue = createQueue[Int](128)
       val burstSize = 100
-      val (sendQueue, downstream) = Source
-        .fromGraph(new SendQueue[Int](sendToDeadLetters))
-        .grouped(burstSize)
-        .async
-        .toMat(TestSink.probe)(Keep.both)
-        .run()
+      val (sendQueue, downstream) =
+        Source.fromGraph(FastDroppingQueue[Int](128)).grouped(burstSize).async.toMat(TestSink.probe)(Keep.both).run()
 
       downstream.request(10)
-      sendQueue.inject(queue)
 
       for (round <- 1 to 100000) {
         for (n <- 1 to burstSize) {
-          if (!sendQueue.offer(round * 1000 + n))
+          if (sendQueue.offer(round * 1000 + n) != FastDroppingQueue.OfferResult.Enqueued)
             fail(s"offer failed at round $round message $n")
         }
         downstream.expectNext((1 to burstSize).map(_ + round * 1000).toList)
@@ -129,16 +119,14 @@ class SendQueueSpec extends AkkaSpec("akka.actor.serialize-messages = off") with
 
     "support multiple producers" in {
       val numberOfProducers = 5
-      val queue = createQueue[Msg](numberOfProducers * 512)
       val producers = Vector.tabulate(numberOfProducers)(i => system.actorOf(producerProps(s"producer-$i")))
 
-      // send 100 per producer before materializing
-      producers.foreach(_ ! ProduceToQueue(0, 100, queue))
-
       val (sendQueue, downstream) =
-        Source.fromGraph(new SendQueue[Msg](sendToDeadLetters)).toMat(TestSink.probe)(Keep.both).run()
+        Source.fromGraph(FastDroppingQueue[Msg](numberOfProducers * 512)).toMat(TestSink.probe)(Keep.both).run()
 
-      sendQueue.inject(queue)
+      // send 100 per producer
+      producers.foreach(_ ! ProduceToQueueValue(0, 100, sendQueue))
+
       producers.foreach(_ ! ProduceToQueueValue(100, 200, sendQueue))
 
       // send 100 more per producer
@@ -159,7 +147,7 @@ class SendQueueSpec extends AkkaSpec("akka.actor.serialize-messages = off") with
       downstream.cancel()
     }
 
-    "deliver first message" in {
+    "deliver first message" ignore {
 
       def test(f: (Queue[String], SendQueue.QueueValue[String], TestSubscriber.Probe[String]) => Unit): Unit = {
 

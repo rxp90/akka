@@ -5,19 +5,24 @@
 package akka.remote.artery
 
 import java.util.concurrent.TimeUnit
+
 import akka.actor.ActorSystem
 import akka.stream.scaladsl._
 import com.typesafe.config.ConfigFactory
 import org.openjdk.jmh.annotations._
 import scala.concurrent.Await
 import scala.concurrent.duration._
+
 import akka.stream.ActorMaterializer
 import akka.stream.ActorMaterializerSettings
 import akka.stream.OverflowStrategy
 import java.util.concurrent.CyclicBarrier
 import java.util.concurrent.CountDownLatch
+
 import akka.stream.KillSwitches
 import org.agrona.concurrent.ManyToOneConcurrentArrayQueue
+
+import akka.stream.impl.FastDroppingQueue
 
 @State(Scope.Benchmark)
 @OutputTimeUnit(TimeUnit.MILLISECONDS)
@@ -74,8 +79,8 @@ class SendQueueBenchmark {
     killSwitch.shutdown()
   }
 
-  @Benchmark
-  @OperationsPerInvocation(100000)
+//  @Benchmark
+//  @OperationsPerInvocation(100000)
   def actorRef(): Unit = {
     val latch = new CountDownLatch(1)
     val barrier = new CyclicBarrier(2)
@@ -92,6 +97,36 @@ class SendQueueBenchmark {
     var n = 1
     while (n <= N) {
       ref ! n
+      if (n % burstSize == 0 && n < N) {
+        barrier.await()
+      }
+      n += 1
+    }
+
+    if (!latch.await(30, TimeUnit.SECONDS))
+      throw new RuntimeException("Latch didn't complete in time")
+    killSwitch.shutdown()
+  }
+
+  @Benchmark
+  @OperationsPerInvocation(100000)
+  def fastDroppingQueue(): Unit = {
+    val latch = new CountDownLatch(1)
+    val barrier = new CyclicBarrier(2)
+    val N = 100000
+    val burstSize = 1000
+
+    val source = FastDroppingQueue[Int](1024)
+
+    val (queue, killSwitch) = source
+      .viaMat(KillSwitches.single)(Keep.both)
+      .toMat(new BarrierSink(N, latch, burstSize, barrier))(Keep.left)
+      .run()(materializer)
+
+    var n = 1
+    while (n <= N) {
+      if (queue.offer(n) != FastDroppingQueue.OfferResult.Enqueued)
+        println(s"offer failed $n") // should not happen
       if (n % burstSize == 0 && n < N) {
         barrier.await()
       }

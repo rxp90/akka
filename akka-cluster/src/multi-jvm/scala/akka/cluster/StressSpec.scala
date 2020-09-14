@@ -69,7 +69,7 @@ private[cluster] object StressMultiJvmSpec extends MultiNodeConfig {
   // not MultiNodeClusterSpec.clusterConfig
   commonConfig(ConfigFactory.parseString("""
     akka.test.cluster-stress-spec {
-      infolog = off
+      infolog = on
       # scale the nr-of-nodes* settings with this factor
       nr-of-nodes-factor = 1
       # not scaled
@@ -105,7 +105,7 @@ private[cluster] object StressMultiJvmSpec extends MultiNodeConfig {
       publish-stats-interval = 1s
     }
     akka.loggers = ["akka.testkit.TestEventListener"]
-    akka.loglevel = INFO
+    akka.loglevel = DEBUG
     akka.remote.log-remote-lifecycle-events = off
     akka.actor.default-dispatcher.fork-join-executor {
       parallelism-min = 8
@@ -845,48 +845,48 @@ abstract class StressSpec
       enterBarrier("after-" + step)
     }
 
-    "gossip when idle" taggedAs LongRunningTest in {
-      idleGossip("idle gossip")
-      enterBarrier("after-" + step)
-    }
-
-    "leave nodes one-by-one from large cluster" taggedAs LongRunningTest in {
-      removeOneByOne(numberOfNodesLeavingOneByOneLarge, shutdown = false)
-      enterBarrier("after-" + step)
-    }
-
-    "shutdown nodes one-by-one from large cluster" taggedAs LongRunningTest in {
-      removeOneByOne(numberOfNodesShutdownOneByOneLarge, shutdown = true)
-      enterBarrier("after-" + step)
-    }
-
-    "leave several nodes" taggedAs LongRunningTest in {
-      removeSeveral(numberOfNodesLeaving, shutdown = false)
-      nbrUsedRoles -= numberOfNodesLeaving
-      enterBarrier("after-" + step)
-    }
-
-    "shutdown several nodes" taggedAs LongRunningTest in {
-      removeSeveral(numberOfNodesShutdown, shutdown = true)
-      nbrUsedRoles -= numberOfNodesShutdown
-      enterBarrier("after-" + step)
-    }
-
-    "shutdown nodes one-by-one from small cluster" taggedAs LongRunningTest in {
-      removeOneByOne(numberOfNodesShutdownOneByOneSmall, shutdown = true)
-      enterBarrier("after-" + step)
-    }
-
-    "leave nodes one-by-one from small cluster" taggedAs LongRunningTest in {
-      removeOneByOne(numberOfNodesLeavingOneByOneSmall, shutdown = false)
-      enterBarrier("after-" + step)
-    }
-
-    "log jvm info" taggedAs LongRunningTest in {
-      if (infolog) {
-        log.info("StressSpec JVM:\n{}", jvmInfo())
-      }
-      enterBarrier("after-" + step)
-    }
+//    "gossip when idle" taggedAs LongRunningTest in {
+//      idleGossip("idle gossip")
+//      enterBarrier("after-" + step)
+//    }
+//
+//    "leave nodes one-by-one from large cluster" taggedAs LongRunningTest in {
+//      removeOneByOne(numberOfNodesLeavingOneByOneLarge, shutdown = false)
+//      enterBarrier("after-" + step)
+//    }
+//
+//    "shutdown nodes one-by-one from large cluster" taggedAs LongRunningTest in {
+//      removeOneByOne(numberOfNodesShutdownOneByOneLarge, shutdown = true)
+//      enterBarrier("after-" + step)
+//    }
+//
+//    "leave several nodes" taggedAs LongRunningTest in {
+//      removeSeveral(numberOfNodesLeaving, shutdown = false)
+//      nbrUsedRoles -= numberOfNodesLeaving
+//      enterBarrier("after-" + step)
+//    }
+//
+//    "shutdown several nodes" taggedAs LongRunningTest in {
+//      removeSeveral(numberOfNodesShutdown, shutdown = true)
+//      nbrUsedRoles -= numberOfNodesShutdown
+//      enterBarrier("after-" + step)
+//    }
+//
+//    "shutdown nodes one-by-one from small cluster" taggedAs LongRunningTest in {
+//      removeOneByOne(numberOfNodesShutdownOneByOneSmall, shutdown = true)
+//      enterBarrier("after-" + step)
+//    }
+//
+//    "leave nodes one-by-one from small cluster" taggedAs LongRunningTest in {
+//      removeOneByOne(numberOfNodesLeavingOneByOneSmall, shutdown = false)
+//      enterBarrier("after-" + step)
+//    }
+//
+//    "log jvm info" taggedAs LongRunningTest in {
+//      if (infolog) {
+//        log.info("StressSpec JVM:\n{}", jvmInfo())
+//      }
+//      enterBarrier("after-" + step)
+//    }
   }
 }

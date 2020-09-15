@@ -223,6 +223,27 @@ import akka.coordination.lease.scaladsl.Lease
         oldReachability.records.map(r => r.observer -> r.subject).toSet !=
           newReachability.records.map(r => r.observer -> r.subject).toSet
 
+    if (changed) {
+      val oldStr =
+        oldReachability.records
+          .map(r => s"${r.observer.address.port.get} -> ${r.subject.address.port.get}: ${r.status}")
+          .toSet
+
+      val newStr =
+        newReachability.records
+          .map(r => s"${r.observer.address.port.get} -> ${r.subject.address.port.get}: ${r.status}")
+          .toSet
+
+      val diff1 = oldStr.diff(newStr)
+      val diff2 = newStr.diff(oldStr)
+
+      println(
+        s"# Reachability changed   diff1 [${diff1.toList.sorted.mkString(",")}], diff2 [${diff2.toList.sorted.mkString(
+          ",")}], old [${oldStr.toList.sorted.mkString(",")}], new [${newStr.toList.sorted.mkString(", ")}]") // FIXME
+    } else {
+      println(s"# Reachability didn't change") // FIXME
+    }
+
     _reachability = newReachability
     changed
   }
